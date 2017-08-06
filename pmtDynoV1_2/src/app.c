@@ -252,13 +252,13 @@ void startRpmMeasure(uint32_t timestamp)
       TIMSK1 &=~ (1<<ICIE1) | (1<<TOIE1);
 
       //proof if shaft rpm are not 0
-      if(app.timer.busyWelle != 0)
+      if(app.timer.busyWelle > 0)
       {
         app.timer.shaftRpm = 0;
         app.timer.busyWelle = 0;
       }
       //proof if moto rpm are not 0 else
-      if(app.timer.busyMoto != 0)
+      if(app.timer.busyMoto > 0)
       {
         app.timer.motorRpm = 0;
         app.timer.busyMoto = 0;
