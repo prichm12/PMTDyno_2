@@ -182,7 +182,8 @@ void startSpeedMeasure(uint32_t timestamp)
   while(app.timer.busyWelle > 0)
   {
     uint32_t actualTime = getActualTime();
-    if((actualTime-timestamp) > 1000000)
+    
+    if((actualTime - timestamp) > 1000000)
     {
       cli();
       
@@ -208,8 +209,8 @@ void startSpeedMeasure(uint32_t timestamp)
 void startRpmMeasure(uint32_t timestamp)
 {
   uint16_t crc;
-  app.timer.busyWelle = 0;
-  app.timer.busyMoto = 0;
+  app.timer.busyWelle = 1;
+  app.timer.busyMoto = 1;
   app.timer.edgeDetection0 = 0;
   app.timer.edgeDetection1 = 0;
 /*
@@ -225,38 +226,47 @@ void startRpmMeasure(uint32_t timestamp)
   //set Timer1 to start shaft speed measurement
   TCCR1B &=~ (1<<ICES1);
   TIMSK1 |= (1<<ICIE1) | (1<<TOIE1);
+  
   //set Timer0 to start shaft speed measurement
   EICRA |= (1<<ISC01); //INT0 interrupt on rising edge(The rising edge on INT0 generates an interrupt
   TIMSK0 |= (1<<TOIE0); //timer overflow interrupt enabled
   EIMSK |= (1<<INT0); //External Interrupt Request 0 Enable
 
-  while((app.timer.busyWelle!=0) || (app.timer.busyMoto!=0))
+  while((app.timer.busyWelle > 0) || (app.timer.busyMoto > 0))
   {
-    while(app.timer.busyWelle > 0)
+    uint32_t actualTime = getActualTime();
+
+    if((actualTime - timestamp) > 1000000)
     {
-      uint32_t actualTime = getActualTime();
+      cli();
       
-      if((actualTime - timestamp) > 1000000)
+      //deactivate timer0
+      TIMSK0 &=~ (1<<TOIE0); //timer overflow interrupt disabled
+      EIMSK &=~ (1<<INT0); //External Interrupt Request 0 disabled
+      app.timer.edgeDetection0 = 0;
+      EICRA &=~ (1<<ISC00); //INT0 interrupt on falling edge(The rising edge on INT0 generates an interrupt
+      
+      //deactivate timer1
+      app.timer.edgeDetection1 = 0;
+      TCCR1B &=~ (1<<ICES1);
+      TIMSK1 &=~ (1<<ICIE1) | (1<<TOIE1);
+
+      //proof if shaft rpm are not 0
+      if(app.timer.busyWelle != 0)
       {
-        cli();
-        //deactivate timer0
-        TIMSK0 &=~ (1<<TOIE0); //timer overflow interrupt disabled
-        EIMSK &=~ (1<<INT0); //External Interrupt Request 0 disabled
-        app.timer.edgeDetection0 = 0;
-        EICRA &=~ (1<<ISC00); //INT0 interrupt on falling edge(The rising edge on INT0 generates an interrupt
-        //deactivate timer1
-        app.timer.edgeDetection1 = 0;
-        TCCR1B &=~ (1<<ICES1);
-        TIMSK1 &=~ (1<<ICIE1) | (1<<TOIE1);
-    
         app.timer.shaftRpm = 0;
-        app.timer.motorRpm = 0;
         app.timer.busyWelle = 0;
-        app.timer.busyMoto = 0;
-        sei();
       }
+      //proof if moto rpm are not 0 else
+      if(app.timer.busyMoto != 0)
+      {
+        app.timer.motorRpm = 0;
+        app.timer.busyMoto = 0;
+      }
+      
+      sei();
     }
-  }//wait until measurements are done (if no signal will be caught on the Pins, this loop is endless, warning!!!!)
+  }
 
   addRpmsToTxBuffer();//add the rpms to the transmit buffer
   addTimeToTxBuffer(timestamp);//add the timestamp to the transmit buffer
