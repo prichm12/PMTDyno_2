@@ -179,11 +179,13 @@ void startSpeedMeasure(uint32_t timestamp)
   TCCR1B &=~ (1<<ICES1);
   TIMSK1 |= (1<<ICIE1) | (1<<TOIE1);
   
-  while(app.timer.busyWelle > 0)
+  while((app.timer.busyWelle > 0) || (app.timer.busyMoto > 0))
   {
     uint32_t actualTime = getActualTime();
+
+    actualTime = actualTime - timestamp;
     
-    if((actualTime - timestamp) > 1000000)
+    if(actualTime > 500000)
     {
       cli();
       
@@ -192,8 +194,10 @@ void startSpeedMeasure(uint32_t timestamp)
         TCCR1B &=~ (1<<ICES1);
         TIMSK1 &=~ (1<<ICIE1) | (1<<TOIE1);
     
-        app.timer.shaftRpm = 0;
         app.timer.busyWelle = 0;
+        app.timer.shaftRpm = 0;
+        ICR1 = 0;
+        app.timer.ovfCounter1 = 0;
         sei();
     }
   }
@@ -236,7 +240,9 @@ void startRpmMeasure(uint32_t timestamp)
   {
     uint32_t actualTime = getActualTime();
 
-    if((actualTime - timestamp) > 1000000)
+    actualTime = actualTime - timestamp;
+    
+    if(actualTime > 500000)
     {
       cli();
       
@@ -251,17 +257,21 @@ void startRpmMeasure(uint32_t timestamp)
       TCCR1B &=~ (1<<ICES1);
       TIMSK1 &=~ (1<<ICIE1) | (1<<TOIE1);
 
-      //proof if shaft rpm are not 0
+      //proof, if no shaft rpms were measured
       if(app.timer.busyWelle > 0)
       {
-        app.timer.shaftRpm = 0;
         app.timer.busyWelle = 0;
+        app.timer.shaftRpm = 0;
+        ICR1 = 0;
+        app.timer.ovfCounter1 = 0;
       }
-      //proof if moto rpm are not 0 else
+      //proof, if no moto rpms were measured 0
       if(app.timer.busyMoto > 0)
       {
         app.timer.motorRpm = 0;
         app.timer.busyMoto = 0;
+        TCNT0 = 0;
+        app.timer.ovfCounter0 = 0;
       }
       
       sei();
@@ -372,13 +382,11 @@ ISR(TIMER1_OVF_vect)
 
 ISR(TIMER1_CAPT_vect)
 {
- 
-  static uint8_t edgeDetection1 = 0;
   
   if(app.timer.edgeDetection1 == 0)
   {
     TCCR1B |= (1<<ICES1);
-    edgeDetection1++;
+    app.timer.edgeDetection1++;
   }
   else if(app.timer.edgeDetection1 == 1)
   {
